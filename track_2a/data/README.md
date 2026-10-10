@@ -1,7 +1,9 @@
 # Data used in this project
 - **Source**: Hugging Face `OSTswiss/MNLIoverSwissVotingBooklets`, file `v1.1.jsonl`. (MIT licence).
   Booklet PDFs: public federal documents from bk.admin.ch, downloaded via the dataset's `booklet_url`.
-- Not stored in this repository (size, and regenerable). To download the full dataset and generate the splits: `make data full splits`.
+- **Dataset storage:** The full dataset is not stored in this repository because of its size and because it can be regenerated from the original source.
+- **Download the full dataset:** Run `make full`. This downloads/prepares the complete dataset from the Hugging Face dataset and retrieves the required booklet PDFs.
+- **Reproduce the solution's exact splits:** Run `make full splits`. This prepares the full dataset and generates the development, validation, and test splits using the project's configured proportions and seed. The resulting split IDs are recorded in `docs/splits.json`.
 - **Preparation**: Duplicate rows are removed using the claim text, reference text, and label. (1,153 unique rows from 1.49k rows)cases = one Task A and one Task B case per row.
 - **Splits**: by voting day so no day or language version crosses pools; pools 0.4/0.3/0.3, seed 0
   -> dev 458 / val 372 / test 323 rows. The case ids of every split are in `docs/splits.json`.
