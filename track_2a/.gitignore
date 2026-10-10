@@ -25,3 +25,16 @@ build/
 .DS_Store
 .idea/
 .vscode/
+
+.pytest_cache/
+.ruff_cache/
+output/
+data/full
+data/dev_a/
+data/dev_b/
+data/test_a/
+data/test_b/
+data/val_a/
+data/val_b/
+.cache/
+*.log
