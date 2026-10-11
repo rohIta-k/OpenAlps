@@ -56,7 +56,7 @@ class LLMClient:
           raise ValueError(f"Unknown task: {task}")
         if self.st.mock:
             n = sum(len(m["content"]) for m in messages) // 4
-            return LLMResult('{"label": "neutral", "quotes": []}', n, 8)
+            return LLMResult('{"label": "neutral", "evidence": []}', n, 8)
         if self.st.use_cache:
             p = self._cache_path(messages, max_tokens,task)
             if os.path.exists(p):
@@ -70,6 +70,13 @@ class LLMClient:
                     model=self.st.model, messages=messages, temperature=0,
                     max_tokens=max_tokens,response_format=response_format(schema, schema_name),)
                 text = (r.choices[0].message.content or "") if r.choices else ""
+                choice = r.choices[0] if r.choices else None
+                log.info(
+                    "task=%s finish_reason=%s output_tokens=%s",
+                    task,
+                    choice.finish_reason if choice else None,
+                    r.usage.completion_tokens if r.usage else 0,
+                )
                 u = r.usage
                 res = LLMResult(text, u.prompt_tokens if u else 0, u.completion_tokens if u else 0)
                 if self.st.use_cache:

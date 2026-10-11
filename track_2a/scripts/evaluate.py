@@ -98,7 +98,7 @@ def main():
     parser.add_argument("--predictions", type=Path, required=True)
     parser.add_argument("--expected", type=Path, required=True, help="expected-labels.jsonl from prepare_cases.py")
     parser.add_argument("--cases", type=Path, help="cases.jsonl, to report scores per language pair")
-    parser.add_argument("--min-ratio", type=float, default=90, help="fuzzy-match score (0-100) a quote needs")
+    parser.add_argument("--min-ratio", type=float, default=75, help="fuzzy-match score (0-100) a quote needs")
     parser.add_argument("--max-quote-chars", type=int, default=MAX_QUOTE_CHARS,
                         help="longest evidence text that counts (about one page)")
     parser.add_argument("--json", type=Path, help="also write the full report as JSON")

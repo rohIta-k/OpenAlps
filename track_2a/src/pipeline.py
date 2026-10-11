@@ -30,7 +30,7 @@ def process_case(case, st, llm):
             res = llm.chat(messages_a(vote, claim, clang, text))
         else:
             source = case["reference"]["text"]
-            res = llm.chat(messages_b(vote, claim, clang, source), max_tokens=TASK_B_MAX_TOKENS)
+            res = llm.chat(messages_b(vote, claim, clang, source), task="B", max_tokens=TASK_B_MAX_TOKENS)
         in_tok, out_tok = res.input_tokens, res.output_tokens
         label, evidence = parse_output(res.text)
         if label is None:

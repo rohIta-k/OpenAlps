@@ -2,6 +2,10 @@
 import os
 from dataclasses import dataclass
 
+from dotenv import load_dotenv
+
+load_dotenv()
+
 
 def _first(*names, default=None):
     for n in names:
@@ -34,7 +38,7 @@ def get_settings() -> Settings:
         max_output_tokens=int(_first("MAX_OUTPUT_TOKENS", default="300")),
         max_input_chars=int(_first("MAX_INPUT_CHARS", default="600000")),  # ~190k tokens guard (context 262k)
         timeout_s=float(_first("TIMEOUT_S", default="300")),
-        data_dir=_first("DATA_DIR", default="/data"),
+        data_dir=_first("DATA_DIR", default="/data/sample"),
         cache_dir=_first("CACHE_DIR", default="/tmp/llm_cache"),
         use_cache=_first("USE_CACHE", default="0") == "1",
         mock=_first("MOCK_LLM", default="0") == "1",
