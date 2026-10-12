@@ -22,15 +22,21 @@ def main(argv=None) -> int:
     ap.add_argument("--output", required=True)
     ap.add_argument("--workers", type=int, default=None)
     ap.add_argument("--limit", type=int, default=None, help="dev only: first N cases")
-    ap.add_argument("--log-file",default="logs/pipeline.log",help="Path to save pipeline logs",)
+    ap.add_argument("--log-file",default="stderr",help="Path to save pipeline logs",)
     a = ap.parse_args(argv)
-    log_path = Path(a.log_file)
-    log_path.parent.mkdir(parents=True, exist_ok=True)
-    logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s", handlers=[logging.FileHandler(a.log_file, mode="w", encoding="utf-8"),logging.StreamHandler(sys.stderr),],force=True,)
+    handlers = [logging.StreamHandler(sys.stderr)]
+    if a.log_file != "stderr":
+      log_path = Path(a.log_file)
+      log_path.parent.mkdir(parents=True, exist_ok=True)
+      handlers.append(logging.FileHandler(log_path, mode="w", encoding="utf-8"))
+    logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s", handlers=handlers,force=True,)
     log.info("Starting pipeline")
     log.info("Input: %s", a.input)
     log.info("Output: %s", a.output)
-    log.info("Log file: %s", log_path)
+    if a.log_file == "stderr":
+      log.info("File logging disabled; writing logs to stderr")
+    else:
+      log.info("Log file: %s", log_path)
     st = get_settings()
     cases = list(read_cases(a.input))
     original_count = len(cases)
