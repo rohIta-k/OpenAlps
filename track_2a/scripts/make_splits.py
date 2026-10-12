@@ -23,7 +23,7 @@ ap.add_argument("--src", default="data/full")
 ap.add_argument("--out-root", default="data")
 ap.add_argument("--splits-json", default="docs/splits.json")
 ap.add_argument("--seed", type=int, default=0)
-ap.add_argument("--pools", default="0.5,0.25,0.25", help="share of voting days for dev,val,test")
+ap.add_argument("--pools", default="0.4,0.3,0.3", help="share of voting days for dev,val,test")
 ap.add_argument("--dev-a", type=int, default=40)
 ap.add_argument("--dev-b", type=int, default=100)
 ap.add_argument("--val-a", type=int, default=60)
@@ -40,7 +40,7 @@ def rd(p):
 
 
 cases = {c["id"]: c for c in rd(src / "cases.jsonl")}
-gold = {g["id"]: g["label"] for g in rd(src / "expected-labels.jsonl")}
+gold = {g["id"]: g for g in rd(src / "expected-labels.jsonl")}
 
 rows = defaultdict(dict)                       # row index -> {"A": case, "B": case}
 for cid, c in cases.items():
@@ -57,12 +57,12 @@ for n in sorted(rows):
         m = re.search(r"(\d{4}_\d{2}_\d{2})", r["A"]["booklet"]["path"])
         date = m.group(1) if m else None
     ref = r["B"]["reference"]["text"] if "B" in r else ""
-    key = (anyc["claim"]["text"], ref, gold[anyc["id"]])
+    key = (anyc["claim"]["text"], ref, gold[anyc["id"]]["label"])
     if key in seen:                            # exact duplicate row: drop
         continue
     seen.add(key)
     srcl = (anyc.get("booklet") or anyc.get("reference"))["language"]
-    info[n] = {"group": date or "vote:" + anyc["vote"], "label": gold[anyc["id"]],
+    info[n] = {"group": date or "vote:" + anyc["vote"], "label": gold[anyc["id"]]["label"],
                "pair": f"{anyc['claim']['language']}>{srcl}"}
 
 groups = sorted({v["group"] for v in info.values()})
@@ -124,7 +124,7 @@ for name, (pool, task, size) in want.items():
     with open(d / "cases.jsonl", "w", encoding="utf-8") as f:
         f.writelines(json.dumps(cases[i], ensure_ascii=False) + "\n" for i in ids)
     with open(d / "expected-labels.jsonl", "w", encoding="utf-8") as f:
-        f.writelines(json.dumps({"id": i, "label": gold[i]}) + "\n" for i in ids)
+        f.writelines(json.dumps(gold[i], ensure_ascii=False) + "\n" for i in ids)
     link = d / "booklets"
     if (src / "booklets").exists() and task == "A":
         if link.is_symlink() or link.exists():
@@ -135,7 +135,7 @@ for name, (pool, task, size) in want.items():
             os.symlink(os.path.relpath(src / "booklets", d), link)
         except OSError:
             shutil.copytree(src / "booklets", link)
-    labs = Counter(gold[i] for i in ids)
+    labs = Counter(gold[i]["label"] for i in ids)
     print(f"{name:7s} n={len(ids):4d} labels(0/1/2)={labs[0]}/{labs[1]}/{labs[2]}  pool={pool}")
 
 Path(a.splits_json).parent.mkdir(parents=True, exist_ok=True)

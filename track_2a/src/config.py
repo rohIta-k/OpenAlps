@@ -34,7 +34,7 @@ def get_settings() -> Settings:
         base_url=_first("BASE_URL", "LLM_BASE_URL", default="https://api.inference.cscs.ch/v1"),
         api_key=_first("API_KEY", "LLM_API_KEY"),
         model=_first("LLM_NAME", "MODEL", default="swiss-ai/Apertus-v1.5-8B"),
-        workers=int(_first("WORKERS", default="2")),
+        workers=int(_first("WORKERS", default="1")),
         max_output_tokens=int(_first("MAX_OUTPUT_TOKENS", default="300")),
         max_input_chars=int(_first("MAX_INPUT_CHARS", default="600000")),  # ~190k tokens guard (context 262k)
         timeout_s=float(_first("TIMEOUT_S", default="300")),

@@ -29,6 +29,8 @@ build/
 .pytest_cache/
 .ruff_cache/
 output/
+logs/
+analysis/
 data/full
 data/dev_a/
 data/dev_b/
