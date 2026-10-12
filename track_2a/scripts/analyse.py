@@ -167,8 +167,11 @@ def main():
             if label_mismatch:
                 record["error_types"].append("label_mismatch")
             if evidence_failure:
+              evidence = prediction.get("evidence") if prediction else None
+              if not isinstance(evidence, list) or len(evidence) == 0:
+                record["error_types"].append("evidence_missing")
+              else:
                 record["error_types"].append("evidence_below_threshold")
-
             if label_mismatch or evidence_failure:
                 task_a_errors.append(record)
 
@@ -188,6 +191,7 @@ def main():
             "task_a_flagged_cases": len(task_a_errors),
             "task_a_label_errors": sum(item["label_mismatch"] for item in task_a_errors),
             "task_a_evidence_failures": sum("evidence_below_threshold" in item["error_types"]for item in task_a_errors),
+            "task_a_evidence_missing": sum("evidence_missing" in item["error_types"]for item in task_a_errors),
             "duplicate_prediction_ids": sorted(duplicate_ids),
             "unknown_prediction_ids": unknown_ids,
         },
@@ -202,6 +206,7 @@ def main():
     print(f"Task A flagged cases: {len(task_a_errors)}")
     print("Task A label errors: "f"{report['summary']['task_a_label_errors']}")
     print("Task A evidence failures: "f"{report['summary']['task_a_evidence_failures']}")
+    print(f"Task A evidence missing: {report['summary']['task_a_evidence_missing']}")
 
 
 if __name__ == "__main__":
