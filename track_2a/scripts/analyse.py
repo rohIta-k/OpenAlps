@@ -159,12 +159,10 @@ def main():
                 record["error_types"].append("label_mismatch")
                 task_b_errors.append(record)
         elif task == "A":
-            needs_evidence = expected_label != 1
             scores = None
-            if needs_evidence:
-                scores = evidence_scores(prediction,gold.get("reference"),args.min_ratio,args.max_quote_chars)
-                record["evidence_analysis"] = scores
-            evidence_failure = (needs_evidence and (scores["best_fuzzy_score"] is None or not scores["matched_threshold"]))
+            scores = evidence_scores(prediction,gold.get("reference"),args.min_ratio,args.max_quote_chars)
+            record["evidence_analysis"] = scores
+            evidence_failure = (scores["best_fuzzy_score"] is None or not scores["matched_threshold"])
 
             if label_mismatch:
                 record["error_types"].append("label_mismatch")
