@@ -87,7 +87,7 @@ def test_mock_with_real_key_is_flagged_loudly(caplog):
     with caplog.at_level(logging.ERROR, logger="track2a"):
         LLMClient(settings("/tmp"))                 # settings() builds mock=True with api_key="k"
     assert "every answer is FAKE" in caplog.text
-    
+
 def test_parse_failure_retries_and_recovers(tmp_path):
     make_pdf(tmp_path / "b.pdf")
     stub = Stub( "unused", i=100, o=10, responses=[ '{"evidence":[]}', '{"label":"neutral","evidence":[]}',],)

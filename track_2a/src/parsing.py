@@ -1,5 +1,8 @@
 """Decode and validate structured model responses."""
 import json
+import logging
+
+logger = logging.getLogger(__name__)
 
 NAMES = ["entailment", "neutral", "contradiction"]
 
@@ -39,7 +42,8 @@ def parse_output_detailed(text: str):
     if label != "neutral" and not validated:
         return None, [], "non_neutral_missing_evidence"
     if label == "neutral" and validated:
-        return None, [], "neutral_has_evidence"
+        logger.warning("Model returned evidence for neutral label; discarding %d evidence item(s)", len(validated))
+        return NAMES.index(label), [], None
     if len(validated) > 5:
         return None, [], "too_many_evidence_items"
     return NAMES.index(label), validated, None

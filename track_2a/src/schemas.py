@@ -24,6 +24,51 @@ TASK_A_SCHEMA = {
     },
     "required": ["label", "evidence"],
     "additionalProperties": False,
+    "anyOf": [
+        {
+            "properties": {
+                "label": {"type": "string", "enum": ["neutral"]},
+                "evidence": {
+                    "type": "array",
+                    "items": {
+                        "type": "object",
+                        "properties": {
+                            "page": {"type": "integer"},
+                            "text": {"type": "string"},
+                        },
+                        "required": ["page", "text"],
+                        "additionalProperties": False,
+                    },
+                    "maxItems": 0,
+                },
+            },
+            "required": ["label", "evidence"],
+            "additionalProperties": False,
+        },
+        {
+            "properties": {
+                "label": {
+                    "type": "string",
+                    "enum": ["entailment", "contradiction"],
+                },
+                "evidence": {
+                    "type": "array",
+                    "items": {
+                        "type": "object",
+                        "properties": {
+                            "page": {"type": "integer"},
+                            "text": {"type": "string"},
+                        },
+                        "required": ["page", "text"],
+                        "additionalProperties": False,
+                    },
+                    "minItems": 1,
+                },
+            },
+            "required": ["label", "evidence"],
+            "additionalProperties": False,
+        },
+    ],
 }
 
 TASK_B_SCHEMA = {
