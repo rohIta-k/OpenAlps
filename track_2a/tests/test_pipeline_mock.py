@@ -10,14 +10,21 @@ def settings(tmp_path):
     return Settings("http://x", "k", "m", 1, 300, 600000, 10, str(tmp_path), "/tmp/c", False, True)
 
 class Stub:
-    def __init__(self, text, i=111, o=22):
+    def __init__(self, text, i=111, o=22, responses=None):
         self.text, self.i, self.o = text, i, o
+        self.responses = list(responses) if responses is not None else None
+        self.calls = 0
 
-    def chat(self, messages, max_tokens=None):
-        return LLMResult(self.text, self.i, self.o)
+    def chat(self, messages, task="A", max_tokens=None):
+        self.calls += 1
+        text = self.text
+        if self.responses is not None:
+            text = self.responses.pop(0) if self.responses else self.text
+        return LLMResult(text, self.i, self.o)
+
 
 class Boom:
-    def chat(self, messages, max_tokens=None):
+    def chat(self, messages, task="A", max_tokens=None):
         raise RuntimeError("network down")
 
 
@@ -60,10 +67,12 @@ def test_task_b(tmp_path):
 
 def test_failure_never_raises_and_unparsable_keeps_tokens(tmp_path):
     make_pdf(tmp_path / "b.pdf")
-    out = process_case(case_a(), settings(tmp_path), Boom())
-    assert out["label"] == 1 and out["metrics"]["input_tokens"] == 0
-    out = process_case(case_a(), settings(tmp_path), Stub("gibberish", i=500, o=5))
-    assert out["label"] == 1 and out["metrics"]["input_tokens"] == 500
+    stub = Stub("gibberish", i=500, o=5)
+    out = process_case(case_a(), settings(tmp_path), stub)
+    assert out["label"] == 1
+    assert out["metrics"]["input_tokens"] == 1000
+    assert out["metrics"]["output_tokens"] == 10
+    assert stub.calls == 2
 
 
 def test_missing_pdf_is_a_fallback_not_a_crash(tmp_path):
@@ -78,3 +87,13 @@ def test_mock_with_real_key_is_flagged_loudly(caplog):
     with caplog.at_level(logging.ERROR, logger="track2a"):
         LLMClient(settings("/tmp"))                 # settings() builds mock=True with api_key="k"
     assert "every answer is FAKE" in caplog.text
+    
+def test_parse_failure_retries_and_recovers(tmp_path):
+    make_pdf(tmp_path / "b.pdf")
+    stub = Stub( "unused", i=100, o=10, responses=[ '{"evidence":[]}', '{"label":"neutral","evidence":[]}',],)
+    out = process_case(case_a(), settings(tmp_path), stub)
+    assert out["label"] == 1
+    assert out["evidence"] == []
+    assert out["metrics"]["input_tokens"] == 200
+    assert out["metrics"]["output_tokens"] == 20
+    assert stub.calls == 2

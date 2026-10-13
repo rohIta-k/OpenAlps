@@ -37,7 +37,7 @@ def get_settings() -> Settings:
         workers=int(_first("WORKERS", default="1")),
         max_output_tokens=int(_first("MAX_OUTPUT_TOKENS", default="300")),
         max_input_chars=int(_first("MAX_INPUT_CHARS", default="600000")),  # ~190k tokens guard (context 262k)
-        timeout_s=float(_first("TIMEOUT_S", default="300")),
+        timeout_s=float(_first("TIMEOUT_S", default="500")),
         data_dir=_first("DATA_DIR", default="/data/sample"),
         cache_dir=_first("CACHE_DIR", default="/tmp/llm_cache"),
         use_cache=_first("USE_CACHE", default="0") == "1",

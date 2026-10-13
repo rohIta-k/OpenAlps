@@ -1,6 +1,7 @@
 """Page-aware PDF text extraction. Index 0 == PDF page 1."""
 import re
 import threading
+import unicodedata
 from functools import lru_cache
 
 from pypdf import PdfReader
@@ -8,9 +9,14 @@ from pypdf import PdfReader
 _lock = threading.Lock()
 
 def _clean(t: str) -> str:
+    t = unicodedata.normalize("NFKC", t)
     t = t.replace("\u00ad", "")                 # soft hyphens
-    t = re.sub(r"(\w)-\n(\w)", r"\1\2", t)      # hyphenation at line breaks
-    t = re.sub(r"[ \t]+", " ", t)
+    t = t.replace("\u00a0", " ")
+    # Join words split by a line-break hyphen.
+    t = re.sub(r"(?<=\w)-[ \t]*\r?\n[ \t]*(?=\w)", "", t)
+    t = t.translate(str.maketrans({"\u2018": "'", "\u2019": "'","\u201c": '"',"\u201d": '"'}))
+    t = re.sub(r"[^\S\r\n]+", " ", t)
+    t = re.sub(r"\n{3,}", "\n\n", t)
     return t.strip()
 
 
