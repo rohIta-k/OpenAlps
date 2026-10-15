@@ -35,6 +35,7 @@ def build_sentence_units( pages: tuple[str, ...], sections_by_page: dict[int, st
                     "page": page_number,
                     "section": (sections_by_page.get(page_number) if sections_by_page else None),
                     "text": sentence,
+                    "position": len(units),
                 }
             )
             sentence_number += 1

@@ -11,6 +11,7 @@ from .pdf_loader import load_pages, load_pdf_outline
 from .prompts import TASK_B_MAX_TOKENS, messages_a, messages_b
 from .section_parser import detect_toc_sections, sections_from_outline
 from .sentence_splitter import build_sentence_units
+from .chunking import build_sentence_neighborhoods
 
 log = logging.getLogger("track2a")
 
@@ -38,12 +39,14 @@ def process_case(case, st, llm):
             sentence_units = build_sentence_units(pages,sections_by_page)
             selected_page_set = set(selected_pages)
             selected_units = [unit for unit in sentence_units if unit["page"] in selected_page_set]
+            context_units = build_sentence_neighborhoods(selected_units,radius=1,)
             # Build the prompt using original PDF page numbers.
             parts = []
             total_chars = 0
             truncated = False
             current_page = None
-            for unit in selected_units:
+            for context_unit in context_units:
+              for unit in context_unit["sentences"]:
                 page_num = unit["page"]
                 if page_num != current_page:
                     chunk = f"[[PAGE {page_num}]]\n"
