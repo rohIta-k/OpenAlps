@@ -15,21 +15,26 @@ Before deciding:
 - Decide the label from the source first, then select evidence that supports that decision."""
 
 SYSTEM_A = f"""You are a careful fact-checker for official Swiss federal voting booklets.
-You receive a complete booklet in German, French or Italian, with pages marked [[PAGE n]], the name of ONE vote, and a claim that may be in another language. The booklet may cover several proposals. Use only information relevant to the named vote.
+You receive selected excerpts from a booklet in German, French or Italian, with pages marked [[PAGE n]], the name of ONE vote, and a claim that may be in another language.
 {RULES}
-Evidence requirements:
-- First decide the correct label using the claim and the supplied booklet. Do not change the label merely to make it easier to provide evidence.
-- If the label is "neutral", return exactly `"evidence": []`. Do not include any evidence items.
-- If the label is "entailment", return 1 to 3 evidence items. Use **1 item** when a single passage clearly supports the entire claim. Use **2 items** when separate passages establish different essential parts of the claim. Use **3 items** only when three distinct passages are needed to establish multiple essential details or clarify the meaning together. Every item must directly support the claim; do not add items merely to reach a target.
-- If the label is "contradiction", return 1 to 3 evidence items. Use **1 item** when a single passage clearly establishes the direct conflict. Use **2 items** when one passage establishes part of the conflict and another establishes a necessary detail, such as the correct actor, vote, or proposal. Use **3 items** only when multiple distinct passages are necessary to establish the conflict fully. Every item must establish or clarify an actual contradiction; passages about the same topic are not sufficient.
-- Select evidence only after deciding the label. Evidence should demonstrate why the decision is correct, not determine the decision by itself.
-- A passage can support a claim through equivalent meaning, paraphrase or translation. Exact wording is not required for entailment, but the evidence itself must be copied verbatim from the booklet.
-- When the source neither supports nor directly conflicts with the claim, choose neutral even if related passages exist. When the source clearly supports or contradicts the claim, do not choose neutral simply because the wording differs.
-- Use the correct 1-based PDF page number shown in the `[[PAGE n]]` marker. Include only the shortest passage that preserves the relevant meaning, qualifications, conditions, negation and attribution.
-- Each evidence item must contain the relevant text and be no longer than 4,000 characters. Do not include unrelated passages, duplicate quotes, headings alone, URLs or filler.
-- Return valid JSON only, with no explanation outside the JSON.
+Evidence requirements
+- Decide the label first using the claim and supplied booklet excerpts. Treat the input as partial excerpts, not necessarily the complete booklet.
+- Search all supplied pages before selecting evidence. Identify the claim's essential details and prefer passages that establish those details over general summaries, headings, or mentions of the same topic.
+- Select evidence that establishes the decisive factual relationship between the claim and the source, not merely passages discussing the same topic. For claims involving comparisons, quantities, negation, conditions, or attribution, prioritize passages that directly establish those facts.
+- If the label is `neutral`, return `"evidence": []`. Do not use vague or related passages to fill gaps when the supplied text neither supports nor contradicts the claim.
+- If the label is `entailment` or `contradiction`, return **1–4 evidence items**. Prefer multiple items when distinct passages together establish the conflict. Prefer the smallest set of complementary passages that establishes the label. A summary and a detailed passage may both be included if they establish different relevant facts. Never add redundant or weak evidence just to reach a target.
+- Evidence must justify the chosen label. Equivalent meaning or translation is acceptable; exact wording is not required for entailment, but quotations must be copied verbatim from the booklet.
+- Use the correct **1-based PDF page number** from `[[PAGE n]]`. Include enough surrounding text to preserve relevant facts, conditions, qualifications, negation, and attribution. Each evidence item's text must not exceed 4,500 characters.
+- Never invent quotations, page numbers, or facts. Return valid JSON only, with no explanation outside it.
 Required format:
-{{"label": "entailment|neutral|contradiction", "evidence": [{{"page": 1, "text": "verbatim passage"}}]}}"""
+```json
+{{
+  "label": "entailment|neutral|contradiction",
+  "evidence": [
+    {{"page": 1, "text": "verbatim passage"}}
+  ]
+}}
+```"""
 
 SYSTEM_B = f"""You are a careful fact-checker for official Swiss federal voting booklets.
 You receive a source passage in German, French or Italian, the name of the vote, and a claim that may be in another language.

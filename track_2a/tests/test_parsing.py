@@ -25,7 +25,7 @@ def test_non_neutral_without_evidence():
     assert parse_output('{"label":"entailment","evidence":[]}') == (None, [])
 
 def test_neutral_with_evidence():
-    assert parse_output('{"label":"neutral","evidence":[{"page":1,"text":"abc"}]}') == (None, [])
+    assert parse_output('{"label":"neutral","evidence":[{"page":1,"text":"abc"}]}') == (1, [])
 
 def test_invalid_page_number():
     assert parse_output('{"label":"entailment","evidence":[{"page":0,"text":"abc"}]}') == (None, [])

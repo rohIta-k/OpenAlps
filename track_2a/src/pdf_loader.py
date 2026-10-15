@@ -4,27 +4,47 @@ import threading
 import unicodedata
 from functools import lru_cache
 
-from pypdf import PdfReader
+import pymupdf
 
 _lock = threading.Lock()
 
 def _clean(t: str) -> str:
     t = unicodedata.normalize("NFKC", t)
-    t = t.replace("\u00ad", "")                 # soft hyphens
+    t = t.replace("\u00ad", "")
     t = t.replace("\u00a0", " ")
     # Join words split by a line-break hyphen.
     t = re.sub(r"(?<=\w)-[ \t]*\r?\n[ \t]*(?=\w)", "", t)
-    t = t.translate(str.maketrans({"\u2018": "'", "\u2019": "'","\u201c": '"',"\u201d": '"'}))
-    t = re.sub(r"[^\S\r\n]+", " ", t)
-    t = re.sub(r"\n{3,}", "\n\n", t)
-    return t.strip()
+    t = t.translate(str.maketrans({"\u2018": "'","\u2019": "'", "\u201c": '"',"\u201d": '"',}))
+    # Normalize whitespace within lines.
+    t = re.sub(r"[ \t]+", " ", t)
+    # Join wrapped lines within each paragraph.
+    paragraphs = re.split(r"\n\s*\n", t)
+    paragraphs = [re.sub(r"\s*\n\s*", " ", p).strip() for p in paragraphs]
+    return "\n\n".join(p for p in paragraphs if p)
 
+def _extract_page_text(page) -> str:
+    """Extract text block-by-block to preserve headings and columns."""
+    blocks = page.get_text("blocks", sort=True)
+    parts = []
+
+    for block in blocks:
+        x0, y0, x1, y1, text = block[:5]
+        if not text.strip():
+            continue
+        parts.append((y0, x0, text.strip()))
+
+    # Top-to-bottom, then left-to-right for blocks at similar positions.
+    parts.sort(key=lambda item: (round(item[0] / 5), item[1]))
+
+    return "\n\n".join(text for _, _, text in parts)
 
 @lru_cache(maxsize=64)
 def _load(path: str) -> tuple:
-    reader = PdfReader(path)
-    return tuple(_clean(p.extract_text() or "") for p in reader.pages)
-
+    pages = []
+    with pymupdf.open(path) as doc:
+        for page in doc:
+            pages.append(_clean(_extract_page_text(page)))
+    return (tuple(pages))
 
 def load_pages(path: str) -> tuple:
     """Text per page, cached per path (deterministic, so case order cannot matter)."""

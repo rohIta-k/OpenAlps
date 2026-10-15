@@ -5,8 +5,9 @@ import time
 
 from .evidence import build_evidence_a, get_index
 from .io_utils import make_response
+from .page_scoring import select_relevant_pages
 from .parsing import parse_output_detailed
-from .pdf_loader import load_pages, render_booklet
+from .pdf_loader import load_pages
 from .prompts import TASK_B_MAX_TOKENS, messages_a, messages_b
 
 log = logging.getLogger("track2a")
@@ -24,9 +25,21 @@ def process_case(case, st, llm):
         if "booklet" in case:
             path = os.path.join(st.data_dir, case["booklet"]["path"])
             pages = load_pages(path)
-            text, truncated = render_booklet(pages, st.max_input_chars)
+            selected_pages, scores = select_relevant_pages(pages, vote)
+            # Build the prompt using original PDF page numbers.
+            parts = []
+            total_chars = 0
+            truncated = False
+            for page_num in selected_pages:
+                chunk = f"[[PAGE {page_num}]]\n{pages[page_num - 1]}\n"
+                if total_chars + len(chunk) > st.max_input_chars:
+                  truncated = True
+                  break
+                parts.append(chunk)
+                total_chars += len(chunk)
             if truncated:
-                log.warning("%s: booklet truncated to %d chars", cid, st.max_input_chars)
+                log.warning("%s: selected booklet pages truncated at %d chars",cid,st.max_input_chars,)
+            text = "\n".join(parts)
             messages = messages_a(vote, claim, clang, text)
             task = "A"
             max_tokens = None
