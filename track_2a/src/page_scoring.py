@@ -129,7 +129,6 @@ def select_relevant_pages( pages: tuple[str, ...], title: str, min_score: float 
     """
     scores = score_pages(pages, title)
     blocks = select_page_blocks(scores, min_score=min_score, expand_score=expand_score, context_pages=context_pages, max_pages=max_pages,)
-
     selected_indices = [pagenum for start, end in blocks for pagenum in range(start, end + 1)]
     log.info("booklet_title=%r selected_pages=%s",title, selected_indices)
     return selected_indices, scores
