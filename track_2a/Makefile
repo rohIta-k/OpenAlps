@@ -25,9 +25,6 @@ setup:
 lint: 
 	uv run ruff check . --fix
 
-test: 
-	uv run python -m pytest -q
-
 run: ## Build Docker image and run real model inference on DATA
 	@test -f $(ENVFILE) || { echo "Missing $(ENVFILE). Run: cp .env.example .env"; exit 1; }
 	@test -f $(DATA)/cases.jsonl || { echo "Missing $(DATA)/cases.jsonl"; exit 1; }

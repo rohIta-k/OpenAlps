@@ -7,8 +7,9 @@ from .evidence import build_evidence_a, get_index
 from .io_utils import make_response
 from .page_scoring import select_relevant_pages
 from .parsing import parse_output_detailed
-from .pdf_loader import load_pages
+from .pdf_loader import load_pages, load_pdf_outline
 from .prompts import TASK_B_MAX_TOKENS, messages_a, messages_b
+from .section_parser import detect_toc_sections, sections_from_outline
 from .sentence_splitter import build_sentence_units
 
 log = logging.getLogger("track2a")
@@ -27,7 +28,14 @@ def process_case(case, st, llm):
             path = os.path.join(st.data_dir, case["booklet"]["path"])
             pages = load_pages(path)
             selected_pages, scores = select_relevant_pages(pages, vote)
-            sentence_units = build_sentence_units(pages)
+            sections_by_page = detect_toc_sections(pages)
+            if not sections_by_page:
+              sections_by_page = sections_from_outline(load_pdf_outline(path), page_count=len(pages))
+            if sections_by_page:
+                log.info( "%s: section metadata assigned to %d PDF pages",cid,len(sections_by_page),)
+            else:
+                log.info("%s: no contents page or usable PDF outline found", cid)
+            sentence_units = build_sentence_units(pages,sections_by_page)
             selected_page_set = set(selected_pages)
             selected_units = [unit for unit in sentence_units if unit["page"] in selected_page_set]
             # Build the prompt using original PDF page numbers.

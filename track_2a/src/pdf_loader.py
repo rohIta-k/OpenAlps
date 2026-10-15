@@ -51,6 +51,23 @@ def load_pages(path: str) -> tuple:
     with _lock:
         return _load(path)
 
+@lru_cache(maxsize=64)
+def _load_pdf_outline(path: str) -> tuple[tuple[int, str, int], ...]:
+    """Return (level, title, physical_page) entries from PDF bookmarks."""
+    with pymupdf.open(path) as doc:
+        return tuple(
+            (int(level), str(title).strip(), int(page))
+            for level, title, page in doc.get_toc(simple=True)
+            if title and page > 0)
+
+def load_pdf_outline(path: str) -> list[dict]:
+    """Extract PDF bookmarks as dictionaries; return [] when none exist."""
+    with _lock:
+        entries = _load_pdf_outline(path)
+    return [
+        {"level": level, "title": title, "page": page}
+        for level, title, page in entries
+    ]
 
 def render_booklet(pages, max_chars: int):
     """Concatenate pages with [[PAGE n]] markers. Returns (text, truncated)."""
