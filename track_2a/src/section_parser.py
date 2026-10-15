@@ -292,3 +292,54 @@ def sections_from_outline(
             result[page] = label
 
     return result
+
+
+def sections_for_vote(
+    sections_by_page: dict[int, str],
+    vote: str,
+) -> set[str]:
+    """Return section labels belonging to the requested vote, or an empty set if uncertain."""
+    if not sections_by_page or not vote.strip():
+        return set()
+
+    def normalize(value: str) -> str:
+        return _normalize(value).strip(" .,:;–—-")
+
+    target = normalize(vote)
+    if not target:
+        return set()
+
+    # Section labels have the form "<vote title> — <section name>".
+    vote_to_sections: dict[str, set[str]] = {}
+
+    for label in sections_by_page.values():
+        if " — " not in label:
+            continue
+
+        vote_title, _ = label.rsplit(" — ", 1)
+        vote_to_sections.setdefault(normalize(vote_title), set()).add(label)
+
+    # Prefer an exact normalized match.
+    if target in vote_to_sections:
+        return {
+            label
+            for label in sections_by_page.values()
+            if normalize(label.rsplit(" — ", 1)[0]) == target
+        }
+
+    # Otherwise, accept a unique containment match only.
+    matches = [
+        title for title in vote_to_sections
+        if title and (title in target or target in title)
+    ]
+
+    if len(matches) != 1:
+        return set()
+
+    matched_title = matches[0]
+    return {
+        label
+        for label in sections_by_page.values()
+        if normalize(label.rsplit(" — ", 1)[0]) == matched_title
+    }
+

@@ -1,99 +1,115 @@
 """Fixed-window chunking and sentence-neighbour context."""
 from __future__ import annotations
 
-def _make_group(sentences: list[dict], group_id: str) -> dict:
-    """Build a chunk while preserving its source sentence metadata."""
-    return {
-        "id": group_id,
-        "sentence_ids": [s["id"] for s in sentences],
-        "pages": sorted({s["page"] for s in sentences}),
-        "sections": list(dict.fromkeys(
-            s["section"] for s in sentences if s.get("section")
-        )),
-        "sentences": sentences,
-        "text": " ".join(s["text"] for s in sentences),
-    }
 
-
-def build_sentence_neighborhoods(
+def pack_top_k_context(
     sentence_units: list[dict],
+    ranked_sentences: list[dict],
+    max_chars: int,
     radius: int = 1,
-) -> list[dict]:
-    """Create one context unit per sentence, including nearby sentences.
-
-    A radius of 1 includes the previous sentence, the current sentence,
-    and the next sentence when they are consecutive in the source.
-    """
+) -> dict:
+    """Expand ranked sentences and pack as much relevant context as fits."""
+    if max_chars < 0:
+        raise ValueError("max_chars must be non-negative")
     if radius < 0:
         raise ValueError("radius must be non-negative")
+    if not sentence_units or not ranked_sentences:
+        return {"text": "", "sentences": [], "truncated": False}
 
-    neighborhoods = []
+    positions = {
+        sentence["id"]: index
+        for index, sentence in enumerate(sentence_units)
+    }
 
-    for i, sentence in enumerate(sentence_units):
-        start = i
-        end = i + 1
+    def render(sentences: list[dict]) -> str:
+        parts = []
+        current_page = None
 
-        # Expand left only across consecutive source positions.
+        for sentence in sentences:
+            page = sentence["page"]
+
+            if page != current_page:
+                parts.append(f"[[PAGE {page}]]")
+                current_page = page
+
+            parts.append(
+                f"[{sentence['id']} p.{page}] {sentence['text']}"
+            )
+
+        return "\n".join(parts)
+
+    selected_ids = set()
+    truncated = False
+
+    for candidate in ranked_sentences:
+        candidate_id = candidate["id"]
+
+        if candidate_id not in positions:
+            continue
+
+        center = positions[candidate_id]
+        start = center
+        end = center
+
+        # Expand left, without crossing gaps in source positions.
         for _ in range(radius):
-            candidate = start - 1
-            if candidate < 0:
+            previous = start - 1
+            if previous < 0:
+                break
+            if sentence_units[previous]["page"] != sentence_units[center]["page"]:
                 break
             if (
                 sentence_units[start]["position"]
-                != sentence_units[candidate]["position"] + 1
+                != sentence_units[previous]["position"] + 1
             ):
                 break
-            start = candidate
+            start = previous
 
-        # Expand right only across consecutive source positions.
+        # Expand right, without crossing gaps in source positions.
         for _ in range(radius):
-            candidate = end
-            if candidate >= len(sentence_units):
+            following = end + 1
+            if following >= len(sentence_units):
+                break
+            if sentence_units[following]["page"] != sentence_units[center]["page"]:
                 break
             if (
-                sentence_units[candidate]["position"]
-                != sentence_units[end - 1]["position"] + 1
+                sentence_units[following]["position"]
+                != sentence_units[end]["position"] + 1
             ):
                 break
-            end += 1
+            end = following
 
-        group = _make_group(
-            sentence_units[start:end],
-            f"N{sentence['id']}",
+        neighborhood = sentence_units[start : end + 1]
+        trial_ids = selected_ids | {
+            sentence["id"] for sentence in neighborhood
+        }
+
+        # Render in source order to calculate the exact resulting size.
+        trial_sentences = sorted(
+            (
+                sentence for sentence in sentence_units
+                if sentence["id"] in trial_ids
+            ),
+            key=lambda sentence: sentence["position"],
         )
-        group["center_sentence_id"] = sentence["id"]
-        neighborhoods.append(group)
+        trial_text = render(trial_sentences)
 
-    return neighborhoods
+        if len(trial_text) > max_chars:
+            truncated = True
+            continue
 
+        selected_ids = trial_ids
 
-def merge_overlapping_neighborhoods(
-    neighborhoods: list[dict],
-) -> list[dict]:
-    """Merge overlapping neighborhoods without duplicating sentences."""
-    if not neighborhoods:
-        return []
+    packed_sentences = sorted(
+        (
+            sentence for sentence in sentence_units
+            if sentence["id"] in selected_ids
+        ),
+        key=lambda sentence: sentence["position"],
+    )
 
-    merged = []
-    current = list(neighborhoods[0]["sentences"])
-
-    for neighborhood in neighborhoods[1:]:
-        next_sentences = neighborhood["sentences"]
-        current_ids = {s["id"] for s in current}
-        next_ids = {s["id"] for s in next_sentences}
-
-        if current_ids & next_ids:
-            # Preserve source order and add only unseen sentences.
-            for sentence in next_sentences:
-                if sentence["id"] not in current_ids:
-                    current.append(sentence)
-                    current_ids.add(sentence["id"])
-            current.sort(key=lambda s: s["position"])
-        else:
-            merged.append(_make_group(
-                current, f"M{len(merged) + 1:05d}"
-            ))
-            current = list(next_sentences)
-
-    merged.append(_make_group(current, f"M{len(merged) + 1:05d}"))
-    return merged
+    return {
+        "text": render(packed_sentences),
+        "sentences": packed_sentences,
+        "truncated": truncated,
+    }
