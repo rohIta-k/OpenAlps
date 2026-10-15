@@ -14,9 +14,11 @@ class Stub:
         self.text, self.i, self.o = text, i, o
         self.responses = list(responses) if responses is not None else None
         self.calls = 0
+        self.last_messages = None
 
     def chat(self, messages, task="A", max_tokens=None):
         self.calls += 1
+        self.last_messages = messages
         text = self.text
         if self.responses is not None:
             text = self.responses.pop(0) if self.responses else self.text
@@ -97,3 +99,39 @@ def test_parse_failure_retries_and_recovers(tmp_path):
     assert out["metrics"]["input_tokens"] == 200
     assert out["metrics"]["output_tokens"] == 20
     assert stub.calls == 2
+
+def test_task_a_prompt_contains_sentence_ids_and_original_pages(tmp_path, monkeypatch):
+    make_pdf(tmp_path / "b.pdf")
+    from src import pipeline
+    monkeypatch.setattr(pipeline,"select_relevant_pages", lambda pages, vote: ([2], [0, 0, 20]),)
+    monkeypatch.setattr(pipeline,"build_sentence_units",lambda pages: [
+            {
+                "id": "S00001",
+                "page": 1,
+                "section": None,
+                "text": "Text from page one.",
+            },
+            {
+                "id": "S00002",
+                "page": 2,
+                "section": None,
+                "text": "Federal Council recommends rejection.",
+            },
+            {
+                "id": "S00003",
+                "page": 3,
+                "section": None,
+                "text": "Text from page three.",
+            },
+        ],
+    )
+    stub = Stub('{"label":"neutral","evidence":[]}')
+    process_case(case_a(), settings(tmp_path), stub)
+    prompt = "\n".join( message["content"] for message in stub.last_messages if isinstance(message.get("content"), str))
+    assert "[[PAGE 2]]" in prompt
+    assert "[S00002]" in prompt
+    assert "Federal Council recommends rejection." in prompt
+    # The other pages must not be included.
+    assert "[[PAGE 1]]" not in prompt
+    assert "[S00001]" not in prompt
+    assert "[S00003]" not in prompt

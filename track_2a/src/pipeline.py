@@ -9,6 +9,7 @@ from .page_scoring import select_relevant_pages
 from .parsing import parse_output_detailed
 from .pdf_loader import load_pages
 from .prompts import TASK_B_MAX_TOKENS, messages_a, messages_b
+from .sentence_splitter import build_sentence_units
 
 log = logging.getLogger("track2a")
 
@@ -26,15 +27,28 @@ def process_case(case, st, llm):
             path = os.path.join(st.data_dir, case["booklet"]["path"])
             pages = load_pages(path)
             selected_pages, scores = select_relevant_pages(pages, vote)
+            sentence_units = build_sentence_units(pages)
+            selected_page_set = set(selected_pages)
+            selected_units = [unit for unit in sentence_units if unit["page"] in selected_page_set]
             # Build the prompt using original PDF page numbers.
             parts = []
             total_chars = 0
             truncated = False
-            for page_num in selected_pages:
-                chunk = f"[[PAGE {page_num}]]\n{pages[page_num - 1]}\n"
+            current_page = None
+            for unit in selected_units:
+                page_num = unit["page"]
+                if page_num != current_page:
+                    chunk = f"[[PAGE {page_num}]]\n"
+                    if total_chars + len(chunk) > st.max_input_chars:
+                        truncated = True
+                        break
+                    parts.append(chunk)
+                    total_chars += len(chunk)
+                    current_page = page_num
+                chunk = f"[{unit['id']}] {unit['text']}\n"
                 if total_chars + len(chunk) > st.max_input_chars:
-                  truncated = True
-                  break
+                    truncated = True
+                    break
                 parts.append(chunk)
                 total_chars += len(chunk)
             if truncated:
