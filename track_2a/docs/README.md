@@ -15,7 +15,6 @@ This directory contains the technical documentation for Track 2A, covering setup
 - [Dataset documentation](../data/README.md) — dataset sources, input format, data layout, preparation, and split details.
 - [Split manifest](splits.json) — recorded development, validation, and test membership.
 ### Engineering and maintenance
-- [Design decisions](decisions.md) — alternatives considered, selected approaches, trade-offs, and rationale.
-- [Testing](testing.md) — unit tests, integration tests, smoke tests, Docker checks, and output validation.
+- [Design decisions](Decisions.md) — alternatives considered, selected approaches, trade-offs, and rationale.
 
 The [project README](../README.md) provides the project overview and entry point. The [technical report](../technical_report.md) presents the consolidated account of the system and its findings, with links to the relevant documentation in this directory.

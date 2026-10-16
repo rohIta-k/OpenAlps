@@ -113,14 +113,25 @@ Evaluation is performed using the official `evaluate.py` script provided in the 
 
 ### Results
 
-| Setup | Metric | Result |
-|---|---|---|
-| Baseline | Macro-F1 | `To be filled after final evaluation` |
-| Final system | Macro-F1 | `To be filled after final evaluation` |
-| Final system | Token usage and inference time | `See final experiment reports` |
-| Final system | Output-contract validation | `To be confirmed for final run` |
+| Metric | Baseline Task A (40 cases) | Baseline Task B (100 cases) | Final Task A (1,488 cases) | Final Task B (1,488 cases) |
+|---|---:|---:|---:|---:|
+| Macro-F1 | 0.8735 | 0.9577 | 0.9275 | 0.9622 |
+| Accuracy | 0.9000 | 0.9600 | 0.9281 | 0.9624 |
+| Evidence score | 0.4444 (12/27) | N/A | 0.7636 (756/990) | N/A |
+| Mean input tokens/case | 28,141.95 | 2,065.05 | 2,978.81* | 2,978.81* |
+| Mean output tokens/case | 108.03 | 14.28 | 60.81* | 60.81* |
+| Mean inference time/case | 4,492.78 ms | 688.35 ms | 2,664.88 ms* | 2,664.88 ms* |
+| Output-contract validation | Passed (40/40) | Passed (100/100) | Passed (2,976/2,976) | Passed (2,976/2,976) |
 
-Individual experiment results and comparisons are documented in the [`reports/`](reports/) folder.
+\* Final-system token and inference-time values are overall averages across all 2,976 cases; task-specific averages were not provided.
+
+The final system improves Task A macro-F1 from 0.8735 to 0.9275 and Task B macro-F1 from 0.9577 to 0.9622. Task A evidence score increases from 0.4444 to 0.7636. 
+
+The complete final evaluation results, including task-wise metrics, per-class performance, language-level scores, evidence scores, and token usage statistics, are available in [`reports/fullsettest.json`](reports/fullsettest.json).
+
+Individual experiment results, language-level metrics, and per-class comparisons are documented in the [`reports/`](reports/) folder.
+
+![Final evaluation results](../track_2a/docs/results.png)
 
 ## 6. Limitations
 
@@ -186,6 +197,8 @@ Detailed installation instructions and runtime variables are documented in [Setu
 4. **Optimize retrieval and context:** Experiment with retrieval depth, sentence selection, and context length to balance evidence coverage against irrelevant information.
 
 5. **Improve evidence handling:** Reduce quotation and page-reference errors using source-assigned sentence identifiers and more robust text matching.
+
+6. **Implement duplicate-input caching:** Cache inference results for identical inputs to avoid redundant model calls while preserving separate predictions for distinct case IDs. This can reduce inference time and token usage without compromising evaluation coverage.
 
 ## License
 
