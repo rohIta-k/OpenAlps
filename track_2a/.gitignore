@@ -27,6 +27,7 @@ logs/
 analysis/
 data/full
 data/dev_a/
+data/batches/*
 data/dev_b/
 data/test_a/
 data/test_b/

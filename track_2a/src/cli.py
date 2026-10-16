@@ -5,7 +5,6 @@ import logging
 import sys
 from pathlib import Path
 
-from .clean import clean_cases
 from .config import get_settings
 from .io_utils import read_cases
 from .llm_client import LLMClient
@@ -35,11 +34,7 @@ def main(argv=None) -> int:
       log.info("Log file: %s", log_path)
     st = get_settings()
     cases = list(read_cases(a.input))
-    original_count = len(cases)
-    cases, duplicate_ids = clean_cases(cases)
-    log.info("Input cases: %d | duplicates removed: %d | unique cases: %d",original_count,len(duplicate_ids),len(cases))
-    if duplicate_ids:
-      log.warning("Duplicate case IDs skipped: %s", duplicate_ids)
+    log.info("Input cases: %d | processing all cases without deduplication", len(cases))
     llm = LLMClient(st)
     Path(a.output).parent.mkdir(parents=True, exist_ok=True)
     done =0

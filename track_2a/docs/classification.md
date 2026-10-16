@@ -1,128 +1,110 @@
-# Classification and evidence
+# Classification and Evidence
 
-## Apertus interface
+## At a glance
 
-[`LLMClient`](../src/llm_client.py) uses the OpenAI-compatible
-`chat.completions.create` interface. It sends `temperature=0`, the selected
-maximum token count, a task-specific model identifier, and a strict JSON Schema
-response format:
+Both tasks use Apertus to compare a claim with a supplied source. The prompts prioritize **source-grounded reasoning over keyword overlap**.
 
-- Task A: `swiss-ai/Apertus-v1.5-70B`, with structured evidence objects.
-- Task B: `swiss-ai/Apertus-v1.5-8B`, with `"evidence": null`.
+| | Task A — PDF booklet | Task B — Reference text |
+|---|---|---|
+| Input | Vote, claim, language, retrieved booklet excerpts | Vote, claim, language, supplied source passage |
+| Model | `swiss-ai/Apertus-v1.5-70B` | `swiss-ai/Apertus-v1.5-8B` |
+| Core task | Classify and cite source evidence | Classify only |
+| Model evidence output | `[{"page": 4, "text": "verbatim quote"}]` | `null` |
+| Final evidence | Verified PDF text and 1-based page | `[]` |
 
-The endpoint is configured by `BASE_URL` (default
-`https://api.inference.cscs.ch/v1`) and authenticated with `API_KEY` or its
-documented alias. `MOCK_LLM=1` bypasses the API and returns intentionally fake
-neutral responses for CI/container checks only.
+## Shared prompt instructions
 
-## Prompt structure and labels
+The shared `RULES` in `src/prompts.py` tell the model to:
 
-[`src/prompts.py`](../src/prompts.py) supplies a shared decision procedure.
-The model must distinguish:
+- **Use only the supplied source.** Do not rely on outside knowledge or plausibility.
+- **Compare meaning, not wording.** Paraphrases and translations can support a claim if the essential meaning agrees.
+- **Check essential details:** vote/proposal, actor, action, stance, polarity/negation, quantities, dates, conditions, attribution, and scope.
+- **Require a specific conflict for contradiction.** Identify the claim's assertion and the incompatible source fact. Missing information or lack of confirmation is not contradiction.
+- **Prefer neutral when unresolved.** If the source is silent, incomplete, ambiguous, or unrelated, do not invent support or conflict.
+- **Decide before selecting evidence.** Avoid choosing a label to fit a loosely related passage.
+- **Return valid JSON only.** No explanation outside the requested structure.
 
-- `entailment`: the source supports the claim, including its actor, action,
-  polarity, quantities, dates, conditions, and scope;
-- `contradiction`: the source directly conflicts with an essential claim
-  detail; and
-- `neutral`: the source is silent, incomplete, ambiguous, unrelated, or does
-  not establish a required detail.
+## Task A: additional evidence instructions
 
-The numeric mapping is applied after parsing:
+Task A uses `SYSTEM_A`. Its excerpts are **partial retrieved passages**, so the model must search all supplied sentences and confirm that a passage addresses the same proposition—not merely the same keyword, committee, or topic.
 
-```text
-0 -> entailment
-1 -> neutral
-2 -> contradiction
-```
+<box>
 
-The prompt explicitly warns against treating missing support as contradiction,
-mixing different votes or actors, confusing existing law with a proposal, and
-using outside knowledge.
+**What Task A emphasizes**
 
-## Task-specific prompt inputs
+- Check the exact vote and actor; never mix proposals or institutional positions.
+- Compare the direction of the claim and source. A source recommending rejection can support a claim that a proposal is unsuitable.
+- If no supplied passage addresses the proposition, choose neutral.
+- Quote only text present in the excerpts. Do not reconstruct context or combine fragments into a fabricated quote.
+- Preserve qualifications, negation, conditions, and attribution in the quote.
+- Use the sentence's own `[S... p.n]` page label; page numbers are 1-based. IDs and markers are metadata, not quote text.
+- For entailment/contradiction, return **1–4 useful evidence items**. Prefer the smallest set that establishes the decision.
+- For neutral, return `"evidence": []`. Each quote must be at most 4,500 characters.
 
-Task A receives:
+</box>
 
-```text
-VOTE: <vote name>
-
-BOOKLET:
-[[PAGE 4]]
-[S00021 p.4] <retrieved sentence>
-[S00022 p.4] <neighboring sentence>
-
-CLAIM (language: <language>): <claim>
-```
-
-The system prompt says that the passages are partial excerpts, requires
-verbatim evidence from supplied sentences, and requires the sentence's
-1-based PDF page. Sentence IDs and page markers are metadata, not quote text.
-
-Task B receives the vote, the complete embedded `SOURCE` passage, and the claim.
-It uses the same semantic decision rules but explicitly forbids evidence
-generation:
+Expected response:
 
 ```json
-{"label": "entailment|neutral|contradiction", "evidence": null}
+{
+  "label": "entailment|neutral|contradiction",
+  "evidence": [
+    {"page": 4, "text": "verbatim source sentence"}
+  ]
+}
 ```
 
-## Parsing and malformed responses
+## Task B: additional instructions
 
-[`parse_output_detailed`](../src/parsing.py) requires a JSON object with a
-valid label and an `evidence` field. It rejects invalid JSON, non-object
-responses, unknown labels, non-list/non-null evidence, invalid page numbers,
-empty or oversized quotes, more than five items, and non-neutral labels with no
-evidence. Evidence returned for a neutral label is discarded with a warning.
-`null` evidence is normalized to an empty list for downstream consistency.
+Task B uses `SYSTEM_B` and the complete source passage supplied with the claim. It follows the shared decision rules, but **must not generate evidence or quotations**.
 
-The pipeline gives a malformed response one retry. It appends a correction
-instruction naming the validation failure and asks for a complete schema-valid
-JSON object. If that request fails or remains malformed,
-[`_fallback`](../src/pipeline.py) emits label `1`, empty evidence, and the
-available token/time metrics. The same neutral fallback covers unexpected
-per-case errors such as a missing PDF.
+```json
+{
+  "label": "entailment|neutral|contradiction",
+  "evidence": null
+}
+```
 
-The client itself retries transient connection, timeout, rate-limit, and
-selected server errors with bounded exponential backoff. It does not retry
-ordinary non-retryable client errors indefinitely.
+The pipeline normalizes Task B's `null` to `[]` in the final output.
 
-## Evidence rules
+## Decision checklist
 
-### Task A
+```mermaid
+flowchart TD
+    A["Identify claim's<br/>essential proposition"] --> B["Check same vote,<br/>proposal, and actor"]
+    B --> C["Compare action, stance,<br/>polarity, numbers, dates,<br/>conditions, and scope"]
+    C --> D{"Source supports<br/>claim?"}
+    D -->|Yes| E["Entailment"]
+    D -->|No| F{"Specific conflicting<br/>source fact?"}
+    F -->|Yes| G["Contradiction"]
+    F -->|No| H["Neutral"]
+```
 
-For entailment or contradiction, the model should return one to four
-`{"page": integer, "text": string}` items copied from the supplied excerpts.
-Neutral must return an empty array. After parsing, `build_evidence_a` verifies
-the quote against the original PDF pages, returns the PDF's own text span, and
-keeps the page number 1-based. It deduplicates matches and caps final evidence
-at five items.
+## API and recovery
 
-If no quote matches but a non-neutral label requires evidence, the code uses a
-page hint or word-overlap page and finally the first non-empty page. This is a
-contract-preserving fallback, not proof that the model's quotation was correct.
+- `LLMClient` in `src/llm_client.py` calls the OpenAI-compatible `chat.completions.create` endpoint with `temperature=0`, task-specific model settings, and JSON Schema output.
+- Endpoint: `BASE_URL` (default `https://api.inference.cscs.ch/v1`); authentication uses `API_KEY` or its documented alias.
+- Task B's prompt configuration sets `TASK_B_MAX_TOKENS = 100`.
+- `MOCK_LLM=1` returns intentionally fake neutral responses for CI checks; it does **not** measure classification quality.
+- A malformed response gets one correction attempt. The client separately retries transient API failures with bounded backoff.
+- If processing still fails, `_fallback` emits a neutral prediction with empty evidence. This is an operational fallback, not a verified neutral judgment.
 
-### Task B
+## Evidence validation: keep these separate
 
-The model must return `evidence: null`; the final contract uses `evidence: []`.
-No citation mapping is performed because the reference text is already part of
-the input and has no PDF page requirement.
+1. **Schema validity** — response has the required JSON structure.
+2. **Quote validity** — Task A quotation matches the original PDF.
+3. **Evidence relevance** — the matched passage actually supports the predicted label.
 
-## Difficult claims and error patterns
+`build_evidence_a` verifies Task A quotes against original PDF text and preserves the source page. If a quote cannot be matched, fallback logic may use a hinted page, a word-overlap page, or the first non-empty page. This preserves output structure but **does not guarantee supporting evidence**.
 
-The prompt and retrieval design specifically target claims where surface
-similarity is misleading:
+## Main failure modes the prompts target
 
-| Claim pattern | Correct distinction |
+| Risk | Prompt safeguard |
 |---|---|
-| “The committee recommends rejecting the proposal.” vs. a source saying the proposal is unsuitable | Likely entailment if the source expresses the same stance; do not reverse the direction. |
-| A claim attributes Parliament's position to the Federal Council | Neutral or contradiction depending on the source's explicit actor; shared topic is not enough. |
-| “The measure reduces the tax by 20%” vs. a source giving a different percentage | Contradiction when the source clearly gives the incompatible figure. |
-| “The proposal was accepted” vs. a booklet describing what would happen if accepted | Neutral: hypothetical consequences do not establish an acceptance result. |
-| A claim adds an unsupported cause, date, scope, or certainty to an otherwise related statement | Neutral unless the source directly conflicts with that added detail. |
-| A negated claim and a source with the opposite polarity | Entailment or contradiction must follow the actual polarity, not keyword overlap. |
-
-Common operational error patterns are missing/invalid JSON, unsupported model
-evidence, wrong page hints, retrieval of a different proposal in the same
-booklet, and overconfident contradiction when the source is merely silent.
-`validate_output.py` catches structural violations, while evidence verification
-and the evaluation script reveal weak citations and label errors.
+| Missing detail treated as contradiction | Require a specific incompatible fact; otherwise prefer neutral |
+| Keyword overlap mistaken for support | Check the central proposition and same vote |
+| Actor or proposal confused | Verify attribution and proposal identity |
+| Direction or negation reversed | Compare polarity and action direction |
+| Hypothetical outcome treated as fact | Check conditions and whether the event actually occurred |
+| Fabricated or irrelevant citations | Task A must quote supplied text verbatim and use the correct page |
+| Explanatory prose breaks output format | Return JSON only |
