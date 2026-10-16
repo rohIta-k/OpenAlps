@@ -1,4 +1,3 @@
-
 """Hybrid sentence retrieval using BM25 and multilingual embeddings."""
 
 from __future__ import annotations
@@ -12,7 +11,12 @@ from pathlib import Path
 import numpy as np
 from sentence_transformers import SentenceTransformer
 
-DEFAULT_MODEL = str(Path(__file__).resolve().parents[1] / "models" / "paraphrase-multilingual-MiniLM-L12-v2")
+MODEL_NAME = "sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2"
+DEFAULT_MODEL = (
+    Path(__file__).resolve().parents[1]
+    / "models"
+    / "paraphrase-multilingual-MiniLM-L12-v2"
+)
 RRF_K = 60
 
 # Preserve numbers, dates, abbreviations and negation as searchable tokens.
@@ -37,7 +41,7 @@ def tokenize(text: str) -> list[str]:
 
 class HybridRetriever:
     """Rank sentence units with BM25 and multilingual semantic similarity."""
-    def __init__(self, sentence_units: list[dict], model_name: str = DEFAULT_MODEL,):
+    def __init__(self, sentence_units: list[dict], model_name: str | Path = DEFAULT_MODEL):
         self.sentence_units = sentence_units
         self.model_name = model_name
         self.documents = [tokenize(sentence["text"])for sentence in sentence_units]
@@ -53,9 +57,12 @@ class HybridRetriever:
         if self._embeddings is not None:
            return
         model_path = Path(self.model_name)
-        if not model_path.is_dir():
-           raise FileNotFoundError(f"Local embedding model not found at {model_path}. ""Run: uv run python scripts/download_model.py")
-        self._model = SentenceTransformer(str(model_path))
+        if model_path.is_dir():
+            self._model = SentenceTransformer(str(model_path),local_files_only=True,)
+        else:
+           model_path.parent.mkdir(parents=True, exist_ok=True)
+           self._model = SentenceTransformer(MODEL_NAME)
+           self._model.save(str(model_path))
         if not self.sentence_units:
             self._embeddings = np.empty((0, 0), dtype=np.float32)
             return

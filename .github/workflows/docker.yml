@@ -15,14 +15,12 @@ jobs:
         working-directory: track_2a
     steps:
       - uses: actions/checkout@v4
-      - run: docker build --platform linux/amd64 -t track2a .
+      
+      - name: Build Docker image
+        run: make run-mock DATA=data/sample
+
       - name: No secrets or .env baked into the image
         run: docker run --rm --entrypoint sh track2a -c 'test ! -f /app/.env && ! env | grep -qi api_key'
-      - name: Mock run (no network, read-only root, read-only /data)
-        run: |
-          mkdir -p output
-          docker run --rm --platform linux/amd64 --network none --read-only --tmpfs /tmp -e MOCK_LLM=1 \
-            -v "$PWD/data/sample:/data:ro" -v "$PWD/output:/output" \
-            track2a --input /data/cases.jsonl --output /output/predictions.jsonl
+
       - name: Validate the official output contract
         run: python3 scripts/validate_output.py --cases data/sample/cases.jsonl --predictions output/predictions.jsonl

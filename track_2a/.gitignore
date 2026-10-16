@@ -31,7 +31,6 @@ build/
 output/
 logs/
 analysis/
-models/
 data/full
 data/dev_a/
 data/dev_b/
