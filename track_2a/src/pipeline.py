@@ -2,6 +2,7 @@
 import logging
 import os
 import time
+from pathlib import Path
 
 from .chunking import pack_top_k_context
 from .evidence import build_evidence_a, get_index
@@ -31,6 +32,7 @@ def process_case(case, st, llm):
     try:
         if "booklet" in case:
             path = os.path.join(st.data_dir, case["booklet"]["path"])
+            path = resolve_pdf_path(path)
             pages = load_pages(path)
             selected_pages, scores = select_relevant_pages(pages, vote)
             sections_by_page = detect_toc_sections(pages)
@@ -91,3 +93,18 @@ def process_case(case, st, llm):
     except Exception as e:
         log.exception("%s: case processing failed", cid)
         return _fallback(cid, t0, repr(e)[:200], in_tok, out_tok)
+
+def resolve_pdf_path(pdf_path: str) -> Path:
+    path = Path(pdf_path)
+    if path.is_absolute() and path.is_file():
+        return path
+    if path.is_file():
+        return path
+    data_dir = Path(os.getenv("DATA_DIR", "data"))
+    parts = path.parts
+    if "booklets" in parts:
+        relative_path = Path(*parts[parts.index("booklets"):])
+        candidate = data_dir / relative_path
+        if candidate.is_file():
+            return candidate
+    raise FileNotFoundError(f"PDF not found: {pdf_path} (DATA_DIR={data_dir})")
