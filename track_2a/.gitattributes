@@ -1,0 +1,2 @@
+track_2a/models/**/*.safetensors filter=lfs diff=lfs merge=lfs -text
+track_2a/models/**/*.bin filter=lfs diff=lfs merge=lfs -text
