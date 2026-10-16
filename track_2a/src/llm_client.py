@@ -1,10 +1,7 @@
 """OpenAI-compatible client for BASE_URL (CSCS in dev, token-counting proxy at evaluation)."""
-import hashlib
-import json
 import logging
-import os
 import time
-from dataclasses import asdict, dataclass
+from dataclasses import dataclass
 
 from openai import (
     APIConnectionError,
@@ -17,6 +14,10 @@ from openai import (
 from src.schemas import TASK_A_SCHEMA, TASK_B_SCHEMA, response_format
 
 log = logging.getLogger("track2a")
+TASK_MODELS = {
+    "A": "swiss-ai/Apertus-v1.5-70B",
+    "B": "swiss-ai/Apertus-v1.5-8B",
+}
 
 @dataclass
 class LLMResult:
@@ -37,12 +38,6 @@ class LLMClient:
                 raise RuntimeError("API_KEY (or LLM_API_KEY) is not set")
             self.client = OpenAI(base_url=st.base_url, api_key=st.api_key,
                                  timeout=st.timeout_s, max_retries=0)
-        if st.use_cache:
-            os.makedirs(st.cache_dir, exist_ok=True)
-
-    def _cache_path(self, messages, max_tokens,task):
-        key = json.dumps([self.st.model, task, max_tokens, messages], ensure_ascii=False)
-        return os.path.join(self.st.cache_dir, hashlib.sha256(key.encode()).hexdigest() + ".json")
 
     def chat(self, messages, task="A", max_tokens=None) -> LLMResult:
         max_tokens = max_tokens or self.st.max_output_tokens
@@ -54,20 +49,16 @@ class LLMClient:
           schema_name = "task_b_response"
         else:
           raise ValueError(f"Unknown task: {task}")
+        model = TASK_MODELS[task]
         if self.st.mock:
             n = sum(len(m["content"]) for m in messages) // 4
             return LLMResult('{"label": "neutral", "evidence": []}', n, 8)
-        if self.st.use_cache:
-            p = self._cache_path(messages, max_tokens,task)
-            if os.path.exists(p):
-                with open(p, encoding="utf-8") as f:
-                    return LLMResult(**json.load(f))
 
         last = None
         for attempt in range(6):
             try:
                 r = self.client.chat.completions.create(
-                    model=self.st.model, messages=messages, temperature=0,
+                    model=model, messages=messages, temperature=0,
                     max_tokens=max_tokens,response_format=response_format(schema, schema_name),)
                 text = (r.choices[0].message.content or "") if r.choices else ""
                 choice = r.choices[0] if r.choices else None
@@ -79,9 +70,6 @@ class LLMClient:
                 )
                 u = r.usage
                 res = LLMResult(text, u.prompt_tokens if u else 0, u.completion_tokens if u else 0)
-                if self.st.use_cache:
-                    with open(self._cache_path(messages, max_tokens,task), "w", encoding="utf-8") as f:
-                        json.dump(asdict(res), f)
                 return res
             except (RateLimitError, APIConnectionError, APITimeoutError) as e:
                 last = e

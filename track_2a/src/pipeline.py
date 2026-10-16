@@ -2,12 +2,21 @@
 import logging
 import os
 import time
+from pathlib import Path
 
+from .chunking import pack_top_k_context
 from .evidence import build_evidence_a, get_index
 from .io_utils import make_response
-from .parsing import parse_output
-from .pdf_loader import load_pages, render_booklet
+from .page_scoring import select_relevant_pages
+from .parsing import parse_output_detailed
+from .pdf_loader import load_pages, load_pdf_outline
 from .prompts import TASK_B_MAX_TOKENS, messages_a, messages_b
+from .retrieval import HybridRetriever
+from .section_parser import (
+    detect_toc_sections,
+    sections_from_outline,
+)
+from .sentence_splitter import build_sentence_units
 
 log = logging.getLogger("track2a")
 
@@ -23,18 +32,56 @@ def process_case(case, st, llm):
     try:
         if "booklet" in case:
             path = os.path.join(st.data_dir, case["booklet"]["path"])
+            path = resolve_pdf_path(path)
             pages = load_pages(path)
-            text, truncated = render_booklet(pages, st.max_input_chars)
-            if truncated:
-                log.warning("%s: booklet truncated to %d chars", cid, st.max_input_chars)
-            res = llm.chat(messages_a(vote, claim, clang, text))
+            selected_pages, scores = select_relevant_pages(pages, vote)
+            sections_by_page = detect_toc_sections(pages)
+            if not sections_by_page:
+              sections_by_page = sections_from_outline(load_pdf_outline(path), page_count=len(pages))
+            if sections_by_page:
+                log.info( "%s: section metadata assigned to %d PDF pages",cid,len(sections_by_page),)
+            else:
+                log.info("%s: no contents page or usable PDF outline found", cid)
+            sentence_units = build_sentence_units(pages,sections_by_page)
+            selected_page_set = set(selected_pages)
+            selected_units = [unit for unit in sentence_units if unit["page"] in selected_page_set]
+            retriever = HybridRetriever(selected_units)
+            ranked_sentences = retriever.retrieve(claim,top_k=30)
+            packed = pack_top_k_context(selected_units,ranked_sentences[:15], max_chars=st.max_input_chars,radius=1)
+            text = packed["text"]
+            if packed["truncated"]:
+                log.warning("%s: retrieved context exceeded the %d-character budget" % (cid, st.max_input_chars))
+            log.info("%s: retrieval candidates=%d packed_sentences=%d context_chars=%d",cid,len(ranked_sentences),len(packed["sentences"]),len(text))
+            messages = messages_a(vote, claim, clang, text)
+            task = "A"
+            max_tokens = None
         else:
             source = case["reference"]["text"]
-            res = llm.chat(messages_b(vote, claim, clang, source), task="B", max_tokens=TASK_B_MAX_TOKENS)
-        in_tok, out_tok = res.input_tokens, res.output_tokens
-        label, evidence = parse_output(res.text)
-        if label is None:
-            return _fallback(cid, t0, "unparsable: " + res.text[:80], in_tok, out_tok)
+            messages = messages_b(vote, claim, clang, source)
+            task = "B"
+            max_tokens = TASK_B_MAX_TOKENS
+        res = llm.chat(messages, task=task, max_tokens=max_tokens)
+        in_tok+= res.input_tokens
+        out_tok+= res.output_tokens
+        label, evidence,error = parse_output_detailed(res.text)
+        if error:
+            log.warning("%s task=%s parse_failure=%s; retrying once",cid, task, error)
+            retry_messages = [dict(m) for m in messages]
+            retry_instruction = ("Your previous response failed JSON validation: "f"{error}. Return a complete JSON object matching the ""required schema exactly. Include every required field, ""use a valid label, and do not include any extra text.")
+            retry_messages[-1] = { **retry_messages[-1],"content": retry_messages[-1]["content"] + "\n\nCORRECTION:\n"+ retry_instruction,}
+            try:
+                retry_res = llm.chat(retry_messages, task=task, max_tokens=max_tokens)
+                in_tok += retry_res.input_tokens
+                out_tok += retry_res.output_tokens
+                label, evidence, retry_error = parse_output_detailed(retry_res.text)
+                if retry_error:
+                    log.error("%s task=%s retry_failed=%s raw_response=%r",cid, task, retry_error, retry_res.text[:300],)
+                    return _fallback(cid, t0,f"unparsable_after_retry: {retry_error}",in_tok, out_tok,)
+                log.info("%s task=%s parse_retry=recovered", cid, task)
+            except Exception:
+                log.exception("%s task=%s retry_request_failed", cid, task)
+                return _fallback(cid, t0, "retry_request_failed", in_tok, out_tok)
+
         if "booklet" in case:
             evidence = (build_evidence_a(evidence, get_index(path, pages), require_one=True)
                         if label in (0, 2) else [])
@@ -44,4 +91,24 @@ def process_case(case, st, llm):
         log.info("%s label=%d in=%d out=%d ms=%d ev=%d", cid, label, in_tok, out_tok, ms, len(evidence))
         return make_response(cid, label, evidence, in_tok, out_tok, ms)
     except Exception as e:
+        log.exception("%s: case processing failed", cid)
         return _fallback(cid, t0, repr(e)[:200], in_tok, out_tok)
+
+def resolve_pdf_path(pdf_path: str) -> Path:
+    path = Path(pdf_path)
+    if path.is_absolute() and path.is_file():
+        return path
+    if path.is_file():
+        return path
+    data_dir = Path(os.getenv("DATA_DIR", "/data"))
+    parts = path.parts
+    if "booklets" in parts:
+        relative_path = Path(*parts[parts.index("booklets"):])
+        candidates = [
+            data_dir / relative_path,
+            Path("/data") / relative_path,
+        ]
+        for candidate in candidates:
+            if candidate.is_file():
+                return candidate
+    raise FileNotFoundError(f"PDF not found: {pdf_path} (DATA_DIR={data_dir})")

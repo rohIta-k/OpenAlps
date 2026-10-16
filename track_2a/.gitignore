@@ -3,13 +3,6 @@
 .env.*
 !.env.example
 
-# Model weights and checkpoints — do not commit these
-*.bin
-*.safetensors
-*.gguf
-*.ckpt
-*.pt
-
 # Python
 __pycache__/
 *.py[cod]
@@ -29,6 +22,7 @@ build/
 .pytest_cache/
 .ruff_cache/
 output/
+models/
 logs/
 analysis/
 data/full

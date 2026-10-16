@@ -15,14 +15,37 @@ jobs:
         working-directory: track_2a
     steps:
       - uses: actions/checkout@v4
-      - run: docker build --platform linux/amd64 -t track2a .
+
+      - name: Free disk space
+        run: |
+          df -h
+          sudo rm -rf /usr/share/dotnet
+          sudo rm -rf /opt/ghc
+          sudo rm -rf /usr/local/share/boost
+          docker system prune -af
+          df -h
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v6
+        with:
+          enable-cache: true
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: uv sync
+
+      - name: Download embedding model
+        run: uv run python scripts/download_model.py
+
+      - name: Build Docker image
+        run: make run-mock DATA=data/sample
+
       - name: No secrets or .env baked into the image
         run: docker run --rm --entrypoint sh track2a -c 'test ! -f /app/.env && ! env | grep -qi api_key'
-      - name: Mock run (no network, read-only root, read-only /data)
-        run: |
-          mkdir -p output
-          docker run --rm --platform linux/amd64 --network none --read-only --tmpfs /tmp -e MOCK_LLM=1 \
-            -v "$PWD/data/sample:/data:ro" -v "$PWD/output:/output" \
-            track2a --input /data/cases.jsonl --output /output/predictions.jsonl
+
       - name: Validate the official output contract
         run: python3 scripts/validate_output.py --cases data/sample/cases.jsonl --predictions output/predictions.jsonl
