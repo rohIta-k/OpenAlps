@@ -23,12 +23,3 @@ dev = [
     "ruff>=0.5",
     "scikit-learn>=1.4",
 ]
-
-
-[[tool.uv.index]]
-name = "pytorch-cpu"
-url = "https://download.pytorch.org/whl/cpu"
-explicit = true
-
-[tool.uv.sources]
-torch = { index = "pytorch-cpu" }
