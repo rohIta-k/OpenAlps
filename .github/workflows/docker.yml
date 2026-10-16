@@ -15,7 +15,10 @@ jobs:
         working-directory: track_2a
     steps:
       - uses: actions/checkout@v4
-      
+
+      - name: Download embedding model
+        run: uv run python scripts/download_model.py
+        
       - name: Build Docker image
         run: make run-mock DATA=data/sample
 

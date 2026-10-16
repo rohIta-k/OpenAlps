@@ -100,11 +100,15 @@ def resolve_pdf_path(pdf_path: str) -> Path:
         return path
     if path.is_file():
         return path
-    data_dir = Path(os.getenv("DATA_DIR", "data"))
+    data_dir = Path(os.getenv("DATA_DIR", "/data"))
     parts = path.parts
     if "booklets" in parts:
         relative_path = Path(*parts[parts.index("booklets"):])
-        candidate = data_dir / relative_path
-        if candidate.is_file():
-            return candidate
+        candidates = [
+            data_dir / relative_path,
+            Path("/data") / relative_path,
+        ]
+        for candidate in candidates:
+            if candidate.is_file():
+                return candidate
     raise FileNotFoundError(f"PDF not found: {pdf_path} (DATA_DIR={data_dir})")

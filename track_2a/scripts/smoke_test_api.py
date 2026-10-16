@@ -15,7 +15,7 @@ BASE_URL = os.getenv(
     "https://api.inference.cscs.ch/v1",
 )
 API_KEY = os.getenv("API_KEY")
-MODEL = os.getenv("LLM_NAME", "swiss-ai/Apertus-v1.5-8B")
+MODEL = "swiss-ai/Apertus-v1.5-8B"
 TIMEOUT = float(os.getenv("TIMEOUT_S", "60"))
 
 if not API_KEY:
